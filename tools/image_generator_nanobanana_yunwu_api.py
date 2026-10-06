@@ -1,11 +1,12 @@
 # https://ai.google.dev/gemini-api/docs/image-generation?hl=zh-cn
 
+import asyncio
 import logging
 from PIL import Image
 from typing import List, Optional
 from google import genai
 from google.genai import types
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 from interfaces.image_output import ImageOutput
 from tools.image_orientation import ensure_not_portrait, landscape_guard_requested
 from tools.image_response import image_from_response_part
@@ -18,18 +19,23 @@ class ImageGeneratorNanobananaYunwuAPI:
         api_key: str,
         model: str = "gemini-2.5-flash-image-preview",
         base_url: str = "https://yunwu.ai",
+        request_timeout_seconds: float = 300,
     ):
+        self.request_timeout_seconds = max(1.0, float(request_timeout_seconds))
         self.client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(
                 base_url=base_url.rstrip("/"),
                 api_version="v1beta",
+                timeout=int(self.request_timeout_seconds * 1000),
             ),
         )
         self.model = model
 
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), after=after_func, reraise=True)
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10),
+           retry=retry_if_exception(lambda exc: not isinstance(exc, asyncio.TimeoutError)),
+           after=after_func, reraise=True)
     async def generate_single_image(
         self,
         prompt: str,
@@ -45,7 +51,8 @@ class ImageGeneratorNanobananaYunwuAPI:
 
         reference_images = [Image.open(path) for path in reference_image_paths]
 
-        response = await self.client.aio.models.generate_content(
+        response = await asyncio.wait_for(
+            self.client.aio.models.generate_content(
             model=self.model,
             contents=reference_images + [prompt],
             config=types.GenerateContentConfig(
@@ -54,6 +61,8 @@ class ImageGeneratorNanobananaYunwuAPI:
                     aspect_ratio=aspect_ratio,
                 ),
             ),
+            ),
+            timeout=self.request_timeout_seconds,
         )
 
         image = None
