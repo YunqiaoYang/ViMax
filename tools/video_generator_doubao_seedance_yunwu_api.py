@@ -16,7 +16,9 @@ class VideoGeneratorDoubaoSeedanceYunwuAPI:
         max_create_attempts: int = 3,
         poll_interval: int = 2,
         max_poll_attempts: int = 300,
+        base_url: str = "https://yunwu.ai/volc/v1",
     ):
+        self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.t2v_model = t2v_model
         self.ff2v_model = ff2v_model
@@ -56,7 +58,7 @@ class VideoGeneratorDoubaoSeedanceYunwuAPI:
 
         logging.info(f"Calling {model} to generate video...")
 
-        url = "https://yunwu.ai/volc/v1/contents/generations/tasks"
+        url = f"{self.base_url}/contents/generations/tasks"
 
 
         content = [
@@ -142,7 +144,7 @@ class VideoGeneratorDoubaoSeedanceYunwuAPI:
         Returns:
             Video URL string
         """
-        url = f"https://yunwu.ai/volc/v1/contents/generations/tasks/{task_id}"
+        url = f"{self.base_url}/contents/generations/tasks/{task_id}"
         headers = {
             'Authorization': f'Bearer {self.api_key}',
         }
